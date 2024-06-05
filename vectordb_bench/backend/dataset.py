@@ -78,7 +78,7 @@ class GIST(BaseDataset):
 class Cohere(BaseDataset):
     name: str = "Cohere"
     dim: int = 768
-    metric_type: MetricType = MetricType.COSINE
+    metric_type: MetricType = MetricType.IP
     use_shuffled: bool = config.USE_SHUFFLED_DATA
     with_gt: bool = True,
     _size_label: dict = {
@@ -111,7 +111,7 @@ class SIFT(BaseDataset):
 class OpenAI(BaseDataset):
     name: str = "OpenAI"
     dim: int = 1536
-    metric_type: MetricType = MetricType.COSINE
+    metric_type: MetricType = MetricType.IP
     use_shuffled: bool = config.USE_SHUFFLED_DATA
     with_gt: bool = True,
     _size_label: dict = {

@@ -213,3 +213,28 @@ class Milvus(VectorDB):
         # Organize results.
         ret = [result.id for result in res[0]]
         return ret
+
+    def batch_search_embedding(
+        self,
+        queries: list[list[float]],  # 注意这里是一个二维列表，表示多个查询向量
+        k: int = 100,
+        filters: dict | None = None,
+        timeout: int | None = None,
+    ) -> list[list[int]]:
+        """Perform a search on multiple query embeddings and return results."""
+        assert self.col is not None
+
+        expr = f"{self._scalar_field} {filters.get('metadata')}" if filters else ""
+
+        # Perform the search.
+        res = self.col.search(
+            data=queries,  # 注意这里传入的是多个查询向量
+            anns_field=self._vector_field,
+            param=self.case_config.search_param(),
+            limit=k,
+            expr=expr,
+        )
+
+        # Organize results.
+        ret = [[hit.id for hit in hits] for hits in res]  # 修改为处理多个查询结果
+        return ret

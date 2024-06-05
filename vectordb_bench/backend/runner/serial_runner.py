@@ -212,11 +212,70 @@ class SerialSearchRunner:
             f"p99={p99}"
          )
         return (avg_recall, p99)
+    def search_batch(self, args: tuple[list, pd.DataFrame]):
+        log.info(f"{mp.current_process().name:14} start search the entire test_data to get recall and latency")
+        with self.db.init():
+            test_data, ground_truth = args
 
+            log.debug(f"test dataset size: {len(test_data)}")
+            print(type(ground_truth))
+            log.debug(f"ground truth size: {ground_truth.columns}, shape: {ground_truth.shape}")
+
+            latencies, recalls = [], []
+            batch_size = 1  # 设置批次大小为100
+
+            # 使用range和batch_size分批处理数据
+            for batch_start in range(0, len(test_data), batch_size):
+                batch_data = test_data[batch_start:batch_start + batch_size]
+                batch_ground_truth_df = ground_truth.slice(batch_start, batch_size)
+                batch_ground_truth_series = batch_ground_truth_df.select('neighbors_id').to_series()
+                batch_ground_truth = batch_ground_truth_series.to_list()
+
+                #batch_ground_truth = ground_truth.iloc[batch_start:batch_start + batch_size]['neighbors_id'].tolist()
+
+                s = time.perf_counter()
+                try:
+                    # 执行批量查询的搜索操作
+                    batch_results = self.db.batch_search_embedding(
+                        batch_data,
+                        self.k,
+                        self.filters,
+                    )
+
+                except Exception as e:
+                    log.warning(f"VectorDB batch_search_embedding error: {e}")
+                    traceback.print_exc(chain=True)
+                    raise e from None
+                cost = time.perf_counter() - s
+                latencies.append(cost)
+
+                # 计算每个查询的召回率并添加到recalls列表
+                for idx, results in enumerate(batch_results):
+                    gt = batch_ground_truth[idx]
+                    recalls.append(calc_recall(self.k, gt[:self.k], results))
+                #log.debug(f"batch_print:cost:{cost}")
+                # 输出日志
+                if (batch_start + batch_size) % batch_size == 0 or (batch_start + batch_size) >= len(test_data):
+                    log.debug(f"({mp.current_process().name:14}) search_count={batch_start + batch_size:3}, latest_latency={latencies[-1]}, latest recall={recalls[-1]}")
+
+            avg_latency = round(np.mean(latencies), 4)
+            avg_recall = round(np.mean(recalls), 4)
+            cost = round(np.sum(latencies), 4)
+            p99 = round(np.percentile(latencies, 99), 4)
+            log.info(
+                f"{mp.current_process().name:14} search entire test_data: "
+                f"cost={cost}s, "
+                f"queries={len(latencies)}, "
+                f"avg_recall={avg_recall}, "
+                f"avg_latency={avg_latency}, "
+                f"p99={p99}"
+            )
+            return (avg_recall, p99)
 
     def _run_in_subprocess(self) -> tuple[float, float]:
         with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
             future = executor.submit(self.search, (self.test_data, self.ground_truth))
+            #future = executor.submit(self.search_batch, (self.test_data, self.ground_truth))
             result = future.result()
             return result
 
